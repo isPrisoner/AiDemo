@@ -9,7 +9,7 @@ import (
 var APIKey string
 
 func LoadEnv() {
-	err := godotenv.Load("init/init.env")
+	err := godotenv.Load("init/initApi.env")
 	if err != nil {
 		fmt.Println("加载.env文件失败:", err)
 		os.Exit(1)

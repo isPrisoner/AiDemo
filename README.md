@@ -43,7 +43,7 @@ AiDemo/
 1. 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/AiDemo.git
+git clone https://github.com/isPrisoner/AiDemo.git
 cd AiDemo
 ```
 
@@ -55,11 +55,10 @@ go mod tidy
 
 3. 配置环境
 
-编辑 `init/development.env` 文件，设置您的API密钥：
+编辑 `init/initApi.env` 文件，设置您的API密钥：
 
 ```
-APP_ENV=development
-DOUBAO_API_KEY=your-api-key
+DOUBAO_API_KEY=YOUR_API_KEY
 ```
 
 4. 运行应用
@@ -69,16 +68,6 @@ go run main.go
 ```
 
 应用将在 http://localhost:8081 上启动。
-
-## 配置说明
-
-项目使用Viper管理配置，支持多环境配置：
-
-- `config/settings/default.yaml`: 默认配置
-- `config/settings/development.yaml`: 开发环境配置
-- `config/settings/production.yaml`: 生产环境配置
-
-通过设置环境变量 `APP_ENV` 可以切换不同环境。
 
 ## API接口
 
