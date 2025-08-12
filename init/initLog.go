@@ -35,7 +35,7 @@ func InitLog() error {
 	utils.EnableAsync(1000, 3*time.Second)
 
 	// 设置日志格式（默认为文本格式，可选JSON格式）
-	// utils.SetFormat(utils.JSON_FORMAT) // 取消注释启用JSON格式
+	// utils.SetFormat(utils.JsonFormat) // 取消注释启用JSON格式
 
 	utils.Info("日志系统初始化完成，已启用按天轮转和异步写入")
 	return nil
