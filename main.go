@@ -5,6 +5,7 @@ import (
 	"AiDemo/handlers"
 	initPkg "AiDemo/init"
 	"AiDemo/utils"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,12 +13,19 @@ import (
 
 func main() {
 	// 初始化日志系统
-	initPkg.InitLog()
+	if err := initPkg.InitLog(); err != nil {
+		// 日志系统初始化失败，使用标准日志记录错误并退出
+		log.Fatalf("日志系统初始化失败: %v", err)
+	}
 	defer initPkg.CloseLog()
 
 	// 加载配置
 	utils.Info("正在加载配置...")
-	config.LoadEnv()
+	err := config.LoadEnv()
+	if err != nil {
+		utils.Fatal("加载配置失败: %v", err)
+		return
+	}
 	utils.Info("配置加载完成")
 
 	// 创建 Gin 引擎
@@ -41,7 +49,7 @@ func main() {
 	utils.Info("🚀 服务已启动，请在浏览器访问: http://localhost:8080")
 
 	// 启动服务
-	err := r.Run(":8080")
+	err = r.Run(":8080")
 	if err != nil {
 		utils.Fatal("服务启动失败: %v", err)
 		return
