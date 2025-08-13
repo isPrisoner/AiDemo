@@ -43,6 +43,8 @@ func main() {
 
 	// 注册路由
 	r.POST("/chat", handlers.ChatHandler)
+	r.GET("/get-prompt", handlers.GetPromptHandler)
+	r.POST("/set-prompt", handlers.SetPromptHandler)
 	utils.Info("API路由已注册")
 
 	// 启动提示

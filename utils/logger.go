@@ -124,7 +124,12 @@ func NewLogger(level int, logFilePath string, showCaller bool) *Logger {
 		ext := filepath.Ext(baseFileName)
 		baseFileName = strings.TrimSuffix(baseFileName, ext) + ext
 
-		currentLogFile = logFilePath
+		// 直接使用带日期的文件名
+		now := time.Now()
+		dateStr := now.Format("2006-01-02")
+		fileNameWithoutExt := strings.TrimSuffix(baseFileName, ext)
+		currentLogFile = filepath.Join(logDir, fmt.Sprintf("%s.%s%s", fileNameWithoutExt, dateStr, ext))
+
 		logFile, err = os.OpenFile(currentLogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err == nil {
 			writer = io.MultiWriter(os.Stdout, logFile)

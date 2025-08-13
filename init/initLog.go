@@ -17,7 +17,7 @@ func InitLog() error {
 		return fmt.Errorf("创建日志目录失败: %w", err)
 	}
 
-	// 设置日志文件路径
+	// 设置日志文件路径，使用基本文件名，让轮转功能添加日期
 	logFile := filepath.Join(logDir, "app.log")
 	err = utils.SetLogFile(logFile)
 	if err != nil {
