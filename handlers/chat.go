@@ -12,10 +12,19 @@ import (
 
 var mu sync.Mutex // 锁，防止并发修改历史
 
+// 角色 -> 系统提示词
+var roleSystemPrompts = map[string]string{
+	"general":    "你是一个专业、友善且简洁的中文AI助理。要求：1) 理解用户真实意图，优先给出可执行答案；2) 回答清晰分点，必要时给示例；3) 不编造事实，未知则说明并给出获取方法；4) 默认使用简体中文；5) 保持礼貌且不啰嗦。",
+	"coder":      "你是资深全栈工程师与代码审阅者。要求：1) 以问题为导向，提供可运行代码与关键说明；2) 代码风格清晰、命名规范、错误处理完善；3) 指出潜在边界条件与复杂度；4) 能根据上下文给出重构建议；5) 输出中避免无意义的客套。默认中文回答。",
+	"translator": "你是专业中英互译员。要求：1) 优先保证语义准确，其次流畅自然；2) 根据语境选择直译或意译；3) 保留专有名词与技术术语；4) 提供1-2种可选表达以供选择；5) 如用户未说明目标语言，优先中译英。",
+	"pm":         "你是资深产品经理。要求：1) 澄清目标、用户、场景与约束；2) 以列表与结构化表达需求；3) 补充验收标准与关键KPI；4) 提供里程碑与风险缓解建议；5) 如问题含糊，先反问澄清。",
+	"scholar":    "你是学术写作与研究助手。要求：1) 用严谨学术语气组织内容；2) 先给提纲再展开；3) 引入必要定义、公式或参考路径；4) 强调方法、数据与限制；5) 避免臆测，必要时提示需查证。默认中文。",
+}
+
 func ChatHandler(c *gin.Context) {
 	var req struct {
-		Message      string `json:"message"`
-		SystemPrompt string `json:"systemPrompt"`
+		Message string `json:"message"`
+		Role    string `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Warning("请求参数解析失败: %v", err)
@@ -23,55 +32,20 @@ func ChatHandler(c *gin.Context) {
 		return
 	}
 
-	utils.Info("收到用户消息: %s", req.Message)
-
-	// 如果提供了自定义提示词，使用它替换系统提示词
-	if req.SystemPrompt != "" {
-		utils.Info("使用自定义提示词")
-		mu.Lock()
-		// 保存旧的历史记录
-		oldHistory := services.History
-		// 创建新的历史记录，使用自定义提示词
-		newHistory := []models.Message{
-			{Role: "system", Content: req.SystemPrompt},
-		}
-		// 添加用户消息到新的历史记录
-		newHistory = append(newHistory, models.Message{Role: "user", Content: req.Message})
-		// 临时替换历史记录
-		services.History = newHistory
-		mu.Unlock()
-
-		utils.Debug("开始调用AI服务...")
-		respText, err := services.CallDoubao(services.History)
-		if err != nil {
-			utils.Error("AI服务调用失败: %v", err)
-			// 恢复原始历史记录
-			mu.Lock()
-			services.History = oldHistory
-			mu.Unlock()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		utils.Debug("AI服务响应成功，长度: %d", len(respText))
-
-		// 更新系统提示词
-		mu.Lock()
-		// 保存新的历史记录，包含系统提示词、用户消息和AI回复
-		services.History = []models.Message{
-			{Role: "system", Content: req.SystemPrompt},
-			{Role: "user", Content: req.Message},
-			{Role: "assistant", Content: respText},
-		}
-		mu.Unlock()
-
-		utils.Info("返回AI回复给用户")
-		c.JSON(http.StatusOK, gin.H{"reply": respText})
-		return
+	role := req.Role
+	if role == "" {
+		role = "general"
+	}
+	sysPrompt, ok := roleSystemPrompts[role]
+	if !ok {
+		sysPrompt = roleSystemPrompts["general"]
 	}
 
-	// 使用默认提示词
+	utils.Info("收到用户消息: %s (role=%s)", req.Message, role)
+
+	// 用角色对应的system提示词重置会话
 	mu.Lock()
+	services.History = []models.Message{{Role: "system", Content: sysPrompt}}
 	services.History = append(services.History, models.Message{Role: "user", Content: req.Message})
 	mu.Unlock()
 
@@ -91,66 +65,4 @@ func ChatHandler(c *gin.Context) {
 
 	utils.Info("返回AI回复给用户")
 	c.JSON(http.StatusOK, gin.H{"reply": respText})
-}
-
-// GetPromptHandler 获取当前系统提示词
-func GetPromptHandler(c *gin.Context) {
-	mu.Lock()
-	var systemPrompt string
-	for _, msg := range services.History {
-		if msg.Role == "system" {
-			systemPrompt = msg.Content
-			break
-		}
-	}
-	mu.Unlock()
-
-	c.JSON(http.StatusOK, gin.H{"prompt": systemPrompt})
-}
-
-// SetPromptHandler 设置系统提示词
-func SetPromptHandler(c *gin.Context) {
-	var req struct {
-		Prompt string `json:"prompt"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Warning("请求参数解析失败: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
-		return
-	}
-
-	if req.Prompt == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "提示词不能为空"})
-		return
-	}
-
-	utils.Info("设置新的系统提示词")
-	mu.Lock()
-	// 找到并更新系统提示词
-	systemPromptUpdated := false
-	for i, msg := range services.History {
-		if msg.Role == "system" {
-			services.History[i].Content = req.Prompt
-			systemPromptUpdated = true
-			break
-		}
-	}
-
-	// 如果没有找到系统提示词，添加一个
-	if !systemPromptUpdated {
-		// 创建新的历史记录
-		newHistory := []models.Message{
-			{Role: "system", Content: req.Prompt},
-		}
-		// 添加旧的历史记录（除了可能存在的系统提示词）
-		for _, msg := range services.History {
-			if msg.Role != "system" {
-				newHistory = append(newHistory, msg)
-			}
-		}
-		services.History = newHistory
-	}
-	mu.Unlock()
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
 }
