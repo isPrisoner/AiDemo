@@ -11,14 +11,6 @@ import (
 	"net/http"
 )
 
-var History []models.Message
-
-func init() {
-	// 初始化对话历史
-	History = append(History, models.Message{Role: "system", Content: "你是一个乐于助人的AI助手"})
-	utils.Debug("初始化对话历史完成")
-}
-
 func CallDoubao(messages []models.Message) (string, error) {
 	url := "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 	utils.Debug("准备调用API: %s", url)

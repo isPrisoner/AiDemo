@@ -4,13 +4,12 @@ import (
 	"AiDemo/models"
 	"AiDemo/services"
 	"AiDemo/utils"
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 )
-
-var mu sync.Mutex // 锁，防止并发修改历史
 
 // 角色 -> 系统提示词
 var roleSystemPrompts = map[string]string{
@@ -23,8 +22,9 @@ var roleSystemPrompts = map[string]string{
 
 func ChatHandler(c *gin.Context) {
 	var req struct {
-		Message string `json:"message"`
-		Role    string `json:"role"`
+		Message   string `json:"message"`
+		Role      string `json:"role"`
+		SessionID string `json:"session_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Warning("请求参数解析失败: %v", err)
@@ -41,16 +41,23 @@ func ChatHandler(c *gin.Context) {
 		sysPrompt = roleSystemPrompts["general"]
 	}
 
-	utils.Info("收到用户消息: %s (role=%s)", req.Message, role)
+	sessionID := req.SessionID
+	if sessionID == "" {
+		sessionID = genSessionID()
+	}
 
-	// 用角色对应的system提示词重置会话
-	mu.Lock()
-	services.History = []models.Message{{Role: "system", Content: sysPrompt}}
-	services.History = append(services.History, models.Message{Role: "user", Content: req.Message})
-	mu.Unlock()
+	utils.Info("收到用户消息: %s (role=%s, session=%s)", req.Message, role, sessionID)
 
+	// 初始化会话（若不存在）
+	if !services.HasSession(sessionID) {
+		services.ResetSession(sessionID, sysPrompt)
+	}
+	// 追加用户消息
+	services.AppendMessage(sessionID, models.Message{Role: "user", Content: req.Message})
+
+	// 调用AI服务
 	utils.Debug("开始调用AI服务...")
-	respText, err := services.CallDoubao(services.History)
+	respText, err := services.CallDoubao(services.GetHistory(sessionID))
 	if err != nil {
 		utils.Error("AI服务调用失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -59,10 +66,18 @@ func ChatHandler(c *gin.Context) {
 
 	utils.Debug("AI服务响应成功，长度: %d", len(respText))
 
-	mu.Lock()
-	services.History = append(services.History, models.Message{Role: "assistant", Content: respText})
-	mu.Unlock()
+	// 记录助手回复
+	services.AppendMessage(sessionID, models.Message{Role: "assistant", Content: respText})
 
 	utils.Info("返回AI回复给用户")
-	c.JSON(http.StatusOK, gin.H{"reply": respText})
+	c.JSON(http.StatusOK, gin.H{"reply": respText, "session_id": sessionID})
+}
+
+func genSessionID() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "sess"
+	}
+	return hex.EncodeToString(b)
 }

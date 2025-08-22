@@ -1,5 +1,20 @@
-// 简化后的前端逻辑（支持角色选择）
+// 简化后的前端逻辑（支持角色选择 + 会话ID持久化）
 let waitingForAIResponse = false;
+let sessionId = getOrCreateSessionId();
+
+function getOrCreateSessionId() {
+    try {
+        const k = 'ai_session_id';
+        let v = localStorage.getItem(k);
+        if (!v) {
+            v = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+            localStorage.setItem(k, v);
+        }
+        return v;
+    } catch (e) {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+}
 
 function sendMessage() {
     if (waitingForAIResponse) return;
@@ -29,12 +44,17 @@ function sendMessage() {
     fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, role })
+        body: JSON.stringify({ message, role, session_id: sessionId })
     })
         .then(res => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
         .then(data => {
             aiEl.textContent = "AI: ";
             aiEl.classList.remove("typing");
+            if (data && data.session_id) {
+                // 以服务端返回为准（兼容后端生成）
+                sessionId = data.session_id;
+                try { localStorage.setItem('ai_session_id', sessionId); } catch (e) { }
+            }
             typeText(aiEl, data.reply || "出错了，请稍后再试");
         })
         .catch(err => {
